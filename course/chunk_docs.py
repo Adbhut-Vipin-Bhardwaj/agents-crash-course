@@ -1,4 +1,5 @@
 import re
+import os
 import hashlib
 from openai import OpenAI
 from tqdm.auto import tqdm
@@ -9,7 +10,7 @@ with open("./openai_api_key.txt", "r") as f:
 
 openai_client = OpenAI(api_key=openai_api_key)
 
-cache_dir = "./cache"
+cache_dir = "./llm_cache"
 
 prompt_template = """
 Split the provided document into logical sections
@@ -134,7 +135,7 @@ def calc_llm_cache_key(prompt):
 
 def get_cache_path(prompt):
     cache_key = calc_llm_cache_key(prompt)
-    cache_file = f"./cache/{cache_key}.txt"
+    cache_file = os.path.join(cache_dir, f"{cache_key}.txt")
     return cache_file
 
 
@@ -195,3 +196,7 @@ def chunk_docs_using_llm(docs):
             section_copy["section"] = section
             chunks.append(section_copy)
     return chunks
+
+
+if __name__ == "__main__":
+    pass

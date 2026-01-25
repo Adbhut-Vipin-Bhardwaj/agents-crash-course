@@ -1,19 +1,52 @@
 import io
+import os
+import json
+import hashlib
 import zipfile
 import requests
 import frontmatter
 
-def read_repo_data(repo_owner, repo_name):
+cache_dir = "./repo_cache"
+
+def calc_repo_cache_key(repo_owner, repo_name):
+    key = f"{repo_owner}/{repo_name}"
+    return hashlib.sha256(key.encode()).hexdigest()
+
+def get_cache_path(repo_owner, repo_name):
+    cache_key = calc_repo_cache_key(repo_owner, repo_name)
+    return os.path.join(cache_dir, f"{cache_key}.json")
+
+def read_from_cache(repo_owner, repo_name):
+    cache_file = get_cache_path(repo_owner, repo_name)
+    if os.path.exists(cache_file):
+        with open(cache_file, "r") as f:
+            return json.load(f)
+    return None
+
+def write_to_cache(repo_owner, repo_name, data):
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file = get_cache_path(repo_owner, repo_name)
+    with open(cache_file, "w") as f:
+        json.dump(data, f)
+
+
+def read_repo_data(repo_owner, repo_name, force_refresh=False):
     """
     Download and parse all markdown files from a GitHub repository.
     
     Args:
         repo_owner: GitHub username or organization
         repo_name: Repository name
+        force_refresh: Whether to ignore cached data
     
     Returns:
         List of dictionaries containing file content and metadata
     """
+    if not force_refresh:
+        cached_data = read_from_cache(repo_owner, repo_name)
+        if cached_data:
+            return cached_data
+
     prefix = 'https://codeload.github.com' 
     url = f'{prefix}/{repo_owner}/{repo_name}/zip/refs/heads/main'
     resp = requests.get(url)
@@ -42,4 +75,16 @@ def read_repo_data(repo_owner, repo_name):
                 print(f"Error processing {filename}: {e}")
                 continue
 
+    write_to_cache(repo_owner, repo_name, repository_data)
+
     return repository_data
+
+
+if __name__ == "__main__":
+    print("Extracting documents for DataTalksClub FAQ...")
+    dtc_faq = read_repo_data('DataTalksClub', 'faq')
+    print(f"FAQ documents: {len(dtc_faq)}")
+
+    print("Extracting documents for Evidently...")
+    evidently_docs = read_repo_data('evidentlyai', 'docs')
+    print(f"Evidently documents: {len(evidently_docs)}")
