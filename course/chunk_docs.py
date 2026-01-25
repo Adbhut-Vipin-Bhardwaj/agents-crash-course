@@ -1,6 +1,7 @@
 import re
 import os
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
 from openai import OpenAI
 from tqdm.auto import tqdm
 
@@ -185,21 +186,39 @@ def intelligent_chunking(text):
 
 
 def chunk_docs_using_llm(docs):
-    chunks = []
-    for doc in tqdm(docs, desc="Chunking docs using LLM"):
+    def process_doc(doc):
         doc_copy = doc.copy()
         doc_content = doc_copy.pop("content")
+
+        if not doc_content:
+            return []
 
         try:
             sections = intelligent_chunking(doc_content)
         except Exception as e:  # Skip in case of error
-            print(f"Error chunking {doc['filename']}: {e}")
-            continue
+            print(f"Error chunking {doc.get('filename', 'unknown')}: {e}")
+            return []
 
+        doc_chunks = []
         for section in sections:
             section_copy = doc_copy.copy()
             section_copy["section"] = section
-            chunks.append(section_copy)
+            doc_chunks.append(section_copy)
+        return doc_chunks
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        results = list(
+            tqdm(
+                executor.map(process_doc, docs),
+                total=len(docs),
+                desc="Chunking docs using LLM"
+            )
+        )
+
+    chunks = []
+    for doc_chunks in results:
+        chunks.extend(doc_chunks)
+
     return chunks
 
 
