@@ -2,3 +2,4 @@
 openai_api_key.txt
 repo_cache
 llm_cache
+__pycache__

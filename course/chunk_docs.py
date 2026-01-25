@@ -189,7 +189,12 @@ def chunk_docs_using_llm(docs):
     for doc in tqdm(docs, desc="Chunking docs using LLM"):
         doc_copy = doc.copy()
         doc_content = doc_copy.pop("content")
-        sections = intelligent_chunking(doc_content)
+
+        try:
+            sections = intelligent_chunking(doc_content)
+        except Exception as e:  # Skip in case of error
+            print(f"Error chunking {doc['filename']}: {e}")
+            continue
 
         for section in sections:
             section_copy = doc_copy.copy()
@@ -199,4 +204,10 @@ def chunk_docs_using_llm(docs):
 
 
 if __name__ == "__main__":
-    pass
+    from extract_docs import read_repo_data
+
+    evidently_docs = read_repo_data('evidentlyai', 'docs')
+    print(f"Evidently documents: {len(evidently_docs)}")
+
+    chunks = chunk_docs_using_llm(evidently_docs)
+    print(f"Evidently chunks: {len(chunks)}")
