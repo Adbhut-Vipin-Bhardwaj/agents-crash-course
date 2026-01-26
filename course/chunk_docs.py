@@ -122,7 +122,7 @@ def chunk_docs_by_section(docs, level=2):
         for section in sections:
             section_copy = doc_copy.copy()
             section_copy["section"] = section
-            chunks.extend(section_copy)
+            chunks.append(section_copy)
     return chunks
 
 ######################
@@ -228,5 +228,11 @@ if __name__ == "__main__":
     evidently_docs = read_repo_data('evidentlyai', 'docs')
     print(f"Evidently documents: {len(evidently_docs)}")
 
-    chunks = chunk_docs_using_llm(evidently_docs)
-    print(f"Evidently chunks: {len(chunks)}")
+    char_count_chunks = chunk_docs_using_sliding_window(evidently_docs)
+    print(f"Evidently char count chunks: {len(char_count_chunks)}")
+
+    section_chunks = chunk_docs_by_section(evidently_docs)
+    print(f"Evidently section chunks: {len(section_chunks)}")
+
+    llm_chunks = chunk_docs_using_llm(evidently_docs)
+    print(f"Evidently chunks: {len(llm_chunks)}")

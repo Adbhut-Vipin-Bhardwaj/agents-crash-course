@@ -122,7 +122,7 @@ def chunk_docs_by_section(docs, level=2):
         for section in sections:
             section_copy = doc_copy.copy()
             section_copy["section"] = section
-            chunks.extend(section_copy)
+            chunks.append(section_copy)
     return chunks
 
 ######################
@@ -228,5 +228,11 @@ if __name__ == "__main__":
     copilot_chat_docs = read_repo_data('microsoft', 'vscode-copilot-chat')
     print(f"Github Copilot Chat documents: {len(copilot_chat_docs)}")
 
-    chunks = chunk_docs_using_llm(copilot_chat_docs)
-    print(f"Github Copilot Chat chunks: {len(chunks)}")
+    char_count_chunks = chunk_docs_using_sliding_window(copilot_chat_docs)
+    print(f"Github Copilot Chat char count chunks: {len(char_count_chunks)}")
+
+    section_chunks = chunk_docs_by_section(copilot_chat_docs)
+    print(f"Github Copilot Chat section chunks: {len(section_chunks)}")
+
+    llm_chunks = chunk_docs_using_llm(copilot_chat_docs)
+    print(f"Github Copilot Chat LLM chunks: {len(llm_chunks)}")
