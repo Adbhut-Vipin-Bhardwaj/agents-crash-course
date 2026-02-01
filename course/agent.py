@@ -5,11 +5,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 from search import SearchEngine
 
-# Initialize search engine with default dataset (Evidently)
-search_engine = SearchEngine()
-search_engine.initialize()
-
-system_prompt = """
+SYSTEM_PROMPT = """
 You are a helpful assistant for a course. 
 
 Always search for relevant information before answering. 
@@ -18,21 +14,50 @@ If the first search doesn't give you enough information, try different search te
 Make multiple searches if needed to provide comprehensive answers.
 """
 
-with open("./openai_api_key.txt", "r") as f:
-    api_key = f.read().strip()
+class RepoAgent:
+    def __init__(
+        self,
+        search_engine: SearchEngine,
+        model_name: str = 'gpt-4o-mini',
+        api_key_path: str = "./openai_api_key.txt"
+    ):
+        self.search_engine = search_engine
+        
+        with open(api_key_path, "r") as f:
+            api_key = f.read().strip()
 
-model = OpenAIChatModel(
-    'gpt-4o-mini',
-    provider=OpenAIProvider(api_key=api_key)
-)
-agent = Agent(
-    name="faq_agent",
-    instructions=system_prompt,
-    tools=[search_engine.text_search],
-    model=model
-)
+        self.model = OpenAIChatModel(
+            model_name,
+            provider=OpenAIProvider(api_key=api_key)
+        )
+        self.system_prompt = SYSTEM_PROMPT
 
-question = "I just discovered the course, can I join now?"
+        self.agent = Agent(
+            name="repo_agent",
+            instructions=self.system_prompt,
+            tools=[self.search_engine.text_search],
+            model=self.model
+        )
 
-result = asyncio.run(agent.run(user_prompt=question))
-print(result.output)
+    async def run(self, question: str):
+        """Run the agent on a user question."""
+        result = await self.agent.run(user_prompt=question)
+        return result
+
+if __name__ == "__main__":
+    # Initialize search engine
+    search_engine = SearchEngine(
+        owner="DataTalksClub",
+        repo="faq",
+    )
+    search_engine.initialize()
+
+    # Initialize agent
+    repo_agent = RepoAgent(search_engine=search_engine)
+
+    # Run question
+    question = "I just discovered the course, can I join now?"
+    result = asyncio.run(repo_agent.run(question))
+    
+    print("\nAgent Response:")
+    print(result.output)

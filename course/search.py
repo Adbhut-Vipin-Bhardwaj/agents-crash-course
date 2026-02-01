@@ -114,10 +114,13 @@ class SearchEngine:
 
 if __name__ == "__main__":
     # Test with default dataset
-    engine = SearchEngine()
+    engine = SearchEngine(
+        owner="DataTalksClub",
+        repo="faq",
+    )
     engine.initialize()
-    
-    query = "What is Evidently?"
+
+    query = "Can I join the course now? course enrollment deadline"
     print(f"\nQuery: {query}")
 
     # Keyword search
