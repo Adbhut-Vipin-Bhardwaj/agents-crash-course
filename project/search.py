@@ -14,134 +14,123 @@ from chunk_docs import (
     chunk_docs_using_llm
 )
 
-force_refresh_embeds = False
-cache_dir = "./embeds_cache"
-model_str = 'multi-qa-distilbert-cos-v1'
+class SearchEngine:
+    def __init__(
+        self, 
+        owner: str = "microsoft", 
+        repo: str = "vscode-copilot-chat", 
+        model_name: str = 'multi-qa-distilbert-cos-v1',
+        cache_dir: str = "./embeds_cache"
+    ):
+        self.owner = owner
+        self.repo = repo
+        self.model_name = model_name
+        self.cache_dir = cache_dir
+        
+        self.embedding_model = SentenceTransformer(model_name)
+        self.index = None
+        self.vector_index = None
+        self.chunks = None
 
-copilot_chat_docs = read_repo_data("microsoft", "vscode-copilot-chat")
-print(f"Copilot Chat documents: {len(copilot_chat_docs)}")
+    def initialize(self, force_refresh: bool = False):
+        """Initialize both text and vector indices."""
+        print(f"Initializing SearchEngine for {self.owner}/{self.repo}...")
+        docs = read_repo_data(self.owner, self.repo)
+        self.chunks = chunk_docs_using_sliding_window(docs)
+        
+        # Text Index
+        self.index = Index(
+            text_fields=["section", "filename"],
+            keyword_fields=[],
+        )
+        self.index.fit(self.chunks)
+        
+        # Vector Index
+        embeddings = None
+        if not force_refresh:
+            embeddings = self._read_from_cache(self.chunks)
+            
+        if embeddings is None or len(embeddings) == 0:
+            embeddings = []
+            for doc in tqdm(self.chunks, desc=f"Generating embeddings for {self.owner}/{self.repo}"):
+                doc_title = doc.get("title", "")
+                doc_section = doc.get("section", "")
+                text = f"{doc_title}\n{doc_section}"
+                embed = self.embedding_model.encode(text)
+                embeddings.append(embed)
+            embeddings = np.array(embeddings)
+            self._write_to_cache(self.chunks, embeddings)
+            
+        self.vector_index = VectorSearch()
+        self.vector_index.fit(embeddings, self.chunks)
+        print("Initialization complete.")
 
-char_count_chunks = chunk_docs_using_sliding_window(copilot_chat_docs)
-print(f"Copilot Chat char count chunks: {len(char_count_chunks)}")
+    def _get_cache_key(self, docs):
+        docs_str = json.dumps(docs, sort_keys=True)
+        return hashlib.sha256(f"{self.model_name}:{docs_str}".encode()).hexdigest()
 
-index = Index(
-    text_fields=["section", "filename"],
-    keyword_fields=[],
-)
-index.fit(char_count_chunks)
+    def _get_cache_path(self, docs):
+        cache_key = self._get_cache_key(docs)
+        return os.path.join(self.cache_dir, f"{cache_key}.npy")
 
+    def _read_from_cache(self, docs):
+        cache_file = self._get_cache_path(docs)
+        if os.path.exists(cache_file):
+            return np.load(cache_file)
+        return None
 
-def get_cache_key(docs, model):
-    docs_str = json.dumps(docs, sort_keys=True)
-    return hashlib.sha256(f"{model}:{docs_str}".encode()).hexdigest()
+    def _write_to_cache(self, docs, embeddings):
+        cache_file = self._get_cache_path(docs)
+        os.makedirs(self.cache_dir, exist_ok=True)
+        np.save(cache_file, embeddings)
 
+    def text_search(self, query: str, num_results: int = 5) -> list[Any]:
+        if not self.index:
+            raise RuntimeError("SearchEngine not initialized. Call .initialize() first.")
+        return self.index.search(query, num_results=num_results)
 
-def get_cache_path(docs, model):
-    cache_key = get_cache_key(docs, model)
-    cache_file = os.path.join(cache_dir, f"{cache_key}.npy")
-    return cache_file
+    def vector_search(self, query: str, num_results: int = 5) -> list[Any]:
+        if not self.vector_index:
+            raise RuntimeError("SearchEngine not initialized. Call .initialize() first.")
+        query_embedding = self.embedding_model.encode(query)
+        return self.vector_index.search(query_embedding, num_results=num_results)
 
+    def hybrid_search(self, query: str, num_results: int = 5) -> list[Any]:
+        text_results = self.text_search(query, num_results=num_results)
+        vector_results = self.vector_search(query, num_results=num_results)
+        
+        seen_sections = set()
+        final_results = []
 
-def read_from_cache(docs, model):
-    cache_file = get_cache_path(docs, model)
-    if os.path.exists(cache_file):
-        return np.load(cache_file)
-    return None
+        for result in text_results + vector_results:
+            section = result["section"]
+            if section not in seen_sections:
+                seen_sections.add(section)
+                final_results.append(result)
+            if len(final_results) >= num_results:
+                break
 
-
-def write_to_cache(docs, model, embeddings):
-    cache_file = get_cache_path(docs, model)
-    os.makedirs(cache_dir, exist_ok=True)
-    np.save(cache_file, embeddings)
-
-
-embedding_model = SentenceTransformer(model_str)
-
-embeddings = []
-if not force_refresh_embeds:
-    embeddings = read_from_cache(char_count_chunks, model_str)
-
-if embeddings is None or len(embeddings) == 0:
-    if embeddings is None:
-        embeddings = []
-
-    for doc in tqdm(char_count_chunks, desc="Generating embeddings"):
-        doc_title = doc.get("title", "")
-        doc_section = doc.get("section", "")
-        text = f"{doc_title}\n{doc_section}"
-        embed = embedding_model.encode(text)
-        embeddings.append(embed)
-    embeddings = np.array(embeddings)
-    write_to_cache(char_count_chunks, model_str, embeddings)
-
-vector_index = VectorSearch()
-vector_index.fit(embeddings, char_count_chunks)
-
-
-def text_search(query: str) -> list[Any]:
-    """
-    Perform a text-based search on the FAQ index.
-
-    Args:
-        query (str): The search query string.
-
-    Returns:
-        List[Any]: A list of up to 5 search results returned by the FAQ index.
-    """
-    return index.search(query, num_results=5)
-
-
-def vector_search(query: str) -> list[Any]:
-    """
-    Perform a vector-based search on the FAQ index.
-
-    Args:
-        query (str): The search query string.
-
-    Returns:
-        List[Any]: A list of up to 5 search results returned by the FAQ index.
-    """
-    query_embedding = embedding_model.encode(query)
-    return vector_index.search(query_embedding, num_results=5)
-
-
-def hybrid_search(query: str) -> list[Any]:
-    """
-    Perform a hybrid search (text + vector) on the FAQ index.
-
-    Args:
-        query (str): The search query string.
-
-    Returns:
-        List[Any]: A list of up to 5 search results returned by the FAQ index.
-    """
-    text_results = text_search(query)
-    vector_results = vector_search(query)
-    
-    seen_sections = set()
-    final_results = []
-
-    for result in text_results + vector_results:
-        section = result["section"]
-        if section not in seen_sections:
-            seen_sections.add(section)
-            final_results.append(result)
-
-    return final_results
-
+        return final_results
 
 if __name__ == "__main__":
+    # Test with default project dataset
+    engine = SearchEngine(
+        owner="microsoft",
+        repo="vscode-copilot-chat",
+    )
+    engine.initialize()
+    
     query = "What is Copilot?"
-    print(f"Query: {query}")
+    print(f"\nQuery: {query}")
 
     # Keyword search
-    text_search_results = text_search(query)
-    print(f"Text Search results: {len(text_search_results)}")
+    text_results = engine.text_search(query)
+    print(f"Text Search results: {len(text_results)}")
 
     # Vector search
-    vector_search_results = vector_search(query)
-    print(f"Vector Search results: {len(vector_search_results)}")
+    vector_results = engine.vector_search(query)
+    print(f"Vector Search results: {len(vector_results)}")
 
     # Hybrid search
-    hybrid_search_results = hybrid_search(query)
-    print(f"Hybrid search results: {len(hybrid_search_results)}")
+    hybrid_results = engine.hybrid_search(query)
+    print(f"Hybrid search results: {len(hybrid_results)}")
