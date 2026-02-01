@@ -2,6 +2,7 @@ import os
 import json
 import hashlib
 import numpy as np
+from typing import Any
 from tqdm.auto import tqdm
 from minsearch import Index, VectorSearch
 from sentence_transformers import SentenceTransformer
@@ -77,16 +78,43 @@ vector_index = VectorSearch()
 vector_index.fit(embeddings, char_count_chunks)
 
 
-def text_search(query):
+def text_search(query: str) -> list[Any]:
+    """
+    Perform a text-based search on the FAQ index.
+
+    Args:
+        query (str): The search query string.
+
+    Returns:
+        List[Any]: A list of up to 5 search results returned by the FAQ index.
+    """
     return index.search(query, num_results=5)
 
 
-def vector_search(query):
+def vector_search(query: str) -> list[Any]:
+    """
+    Perform a vector-based search on the FAQ index.
+
+    Args:
+        query (str): The search query string.
+
+    Returns:
+        List[Any]: A list of up to 5 search results returned by the FAQ index.
+    """
     query_embedding = embedding_model.encode(query)
     return vector_index.search(query_embedding, num_results=5)
 
 
-def hybrid_search(query):
+def hybrid_search(query: str) -> list[Any]:
+    """
+    Perform a hybrid search (text + vector) on the FAQ index.
+
+    Args:
+        query (str): The search query string.
+
+    Returns:
+        List[Any]: A list of up to 5 search results returned by the FAQ index.
+    """
     text_results = text_search(query)
     vector_results = vector_search(query)
     
