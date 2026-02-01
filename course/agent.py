@@ -3,7 +3,11 @@ from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
-from search import text_search
+from search import SearchEngine
+
+# Initialize search engine with default dataset (Evidently)
+search_engine = SearchEngine()
+search_engine.initialize()
 
 system_prompt = """
 You are a helpful assistant for a course. 
@@ -24,10 +28,11 @@ model = OpenAIChatModel(
 agent = Agent(
     name="faq_agent",
     instructions=system_prompt,
-    tools=[text_search],
+    tools=[search_engine.text_search],
     model=model
 )
 
 question = "I just discovered the course, can I join now?"
 
 result = asyncio.run(agent.run(user_prompt=question))
+print(result.output)
